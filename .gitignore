@@ -18,3 +18,4 @@ _site/
 .checkstyle
 *.log
 .DS_Store
+benchmark/

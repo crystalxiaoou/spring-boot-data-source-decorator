@@ -1,0 +1,7 @@
+spring:
+  sleuth:
+    enabled: false
+
+decorator:
+  datasource:
+    enabled: false

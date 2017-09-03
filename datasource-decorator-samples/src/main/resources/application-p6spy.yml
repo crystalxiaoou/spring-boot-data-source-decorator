@@ -1,0 +1,5 @@
+decorator:
+  datasource:
+    enabled: true
+    p6spy:
+      enable-logging: false

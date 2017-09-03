@@ -3,7 +3,7 @@ server:
 
 spring:
   sleuth:
-    enabled: true
+    enabled: false
     sampler:
       percentage: 1
   datasource:
@@ -18,3 +18,7 @@ spring:
 logging:
   level:
     ROOT: info
+
+decorator:
+  datasource:
+    enabled: false
