@@ -23,10 +23,7 @@ import org.springframework.cloud.sleuth.Span;
 import org.springframework.cloud.sleuth.Tracer;
 import org.springframework.cloud.sleuth.util.ExceptionUtils;
 
-import java.sql.SQLException;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -38,40 +35,31 @@ import java.util.stream.Collectors;
 public class TracingQueryExecutionListener implements QueryExecutionListener {
 
     private final Tracer tracer;
-    private Map<String, String> resolvedDataSourceProxyNames = new ConcurrentHashMap<>();
+    private final DataSourceProxySpanNameResolver dataSourceProxySpanNameResolver;
 
-    TracingQueryExecutionListener(Tracer tracer) {
+    TracingQueryExecutionListener(Tracer tracer, DataSourceProxySpanNameResolver dataSourceProxySpanNameResolver) {
         this.tracer = tracer;
+        this.dataSourceProxySpanNameResolver = dataSourceProxySpanNameResolver;
     }
 
     @Override
     public void beforeQuery(ExecutionInfo execInfo, List<QueryInfo> queryInfoList) {
-        String dataSourceName = dataSourceUrl(execInfo);
-        tracer.createSpan(dataSourceName + "/query");
-        tracer.addTag("sql", queryInfoList.stream().map(QueryInfo::getQuery).collect(Collectors.joining("\n")));
+        Span span = tracer.createSpan(dataSourceProxySpanNameResolver.querySpanName(execInfo));
+        span.logEvent(Span.CLIENT_SEND);
+        tracer.addTag(SleuthListenerConfiguration.SPAN_SQL_QUERY_TAG_NAME, queryInfoList.stream().map(QueryInfo::getQuery).collect(Collectors.joining("\n")));
         tracer.addTag(Span.SPAN_LOCAL_COMPONENT_TAG_NAME, "database");
     }
 
     @Override
     public void afterQuery(ExecutionInfo execInfo, List<QueryInfo> queryInfoList) {
         Span span = tracer.getCurrentSpan();
+        span.logEvent(Span.CLIENT_RECV);
         if (execInfo.getThrowable() != null) {
-            span.tag(Span.SPAN_ERROR_TAG_NAME, ExceptionUtils.getExceptionMessage(execInfo.getThrowable()));
+            tracer.addTag(Span.SPAN_ERROR_TAG_NAME, ExceptionUtils.getExceptionMessage(execInfo.getThrowable()));
         }
         if (execInfo.getMethod().getName().equals("executeUpdate")) {
-            span.tag(SleuthListenerConfiguration.SPAN_ROW_COUNT_TAG_NAME, String.valueOf(execInfo.getResult()));
+            tracer.addTag(SleuthListenerConfiguration.SPAN_ROW_COUNT_TAG_NAME, String.valueOf(execInfo.getResult()));
         }
         tracer.close(span);
-    }
-
-    private String dataSourceUrl(ExecutionInfo executionInfo) {
-        return resolvedDataSourceProxyNames.computeIfAbsent(executionInfo.getDataSourceName(), dataSourceName -> {
-            try {
-                return executionInfo.getStatement().getConnection().getMetaData().getURL();
-            }
-            catch (SQLException e) {
-                return "jdbc:";
-            }
-        });
     }
 }

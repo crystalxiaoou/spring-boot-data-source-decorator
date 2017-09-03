@@ -1,9 +1,10 @@
 **Spring Boot DataSource Decorator**
 
 Spring Boot autoconfiguration for integration with 
-* [P6Spy](https://github.com/p6spy/p6spy)
-* [Datasource Proxy](https://github.com/ttddyy/datasource-proxy)
-* [FlexyPool](https://github.com/vladmihalcea/flexy-pool)
+* [P6Spy](https://github.com/p6spy/p6spy) - adds ability to intercept and log sql queries, including interception of a most `Connection`, `Statement` and `ResultSet` methods invocations
+* [Datasource Proxy](https://github.com/ttddyy/datasource-proxy) - more lightweight than p6spy, supports only `beforeQuery` and `afterQuery` events  
+* [FlexyPool](https://github.com/vladmihalcea/flexy-pool) - adds connection pool metrics (jmx, codahale, dropwizard) and flexible strategies for adjusting pool size on demand
+* [Spring Cloud Sleuth](https://github.com/spring-cloud/spring-cloud-sleuth) - library for distributed tracing, if found in classpath enables jdbc connections (p6spy) and queries (p6spy, datasource-proxy) tracing 
 
 **Why Should I Care**
 
@@ -19,9 +20,9 @@ Add one of the starters to the classpath of a Spring Boot application and your d
 
 Gradle:
 ```groovy
-compile('com.github.gavlyukovskiy:p6spy-spring-boot-starter')
-compile('com.github.gavlyukovskiy:datasource-proxy-spring-boot-starter')
-compile('com.github.gavlyukovskiy:flexy-pool-spring-boot-starter')
+compile('com.github.gavlyukovskiy:p6spy-spring-boot-starter:1.2.1')
+compile('com.github.gavlyukovskiy:datasource-proxy-spring-boot-starter:1.2.1')
+compile('com.github.gavlyukovskiy:flexy-pool-spring-boot-starter:1.2.1')
 ```
 
 Maven:
@@ -29,16 +30,21 @@ Maven:
 <dependency>
     <groupId>com.github.gavlyukovskiy</groupId>
     <artifactId>p6spy-spring-boot-starter</artifactId>
+    <version>1.2.1</version>
 </dependency>
 <dependency>
     <groupId>com.github.gavlyukovskiy</groupId>
     <artifactId>datasource-proxy-spring-boot-starter</artifactId>
+    <version>1.2.1</version>
 </dependency>
 <dependency>
     <groupId>com.github.gavlyukovskiy</groupId>
     <artifactId>flexy-pool-spring-boot-starter</artifactId>
+    <version>1.2.1</version>
 </dependency>
 ```
+
+NOTE: To use FlexyPool you must add `PoolAdapter` for your particular connection pool.
 
 **P6Spy**
 
@@ -74,16 +80,18 @@ public JdbcEventListener myListener() {
 
 This done by adding `RuntimeListenerSupportFactory` into P6Spy `modulelist`, overriding this property will cause to not registering factory thus listeners will not be applied  
 
-You can configure small set of parameters in your application properties:
+You can configure small set of parameters in your `application.properties`:
 ```properties
 # Register RuntimeListenerSupportFactory if JdbcEventListener beans were found
-spring.datasource.decorator.p6spy.enable-runtime-listeners=true
+decorator.datasource.p6spy.enable-runtime-listeners=true
+# Register P6LogFactory to log JDBC events
+decorator.datasource.p6spy.enable-logging=true
 # Use com.p6spy.engine.spy.appender.MultiLineFormat instead of com.p6spy.engine.spy.appender.SingleLineFormat
-spring.datasource.decorator.p6spy.multiline=true
+decorator.datasource.p6spy.multiline=true
 # Use logging for default listeners [slf4j, sysout, file]
-spring.datasource.decorator.p6spy.logging=slf4j
+decorator.datasource.p6spy.logging=slf4j
 # Log file to use (only with logging=file)
-spring.datasource.decorator.p6spy.log-file=spy.log
+decorator.datasource.p6spy.log-file=spy.log
 ```
 
 Also you can configure P6Spy manually using one of available configuration methods. For more information please refer to the [P6Spy Configuration Guide](http://p6spy.readthedocs.io/en/latest/configandusage.html)   
@@ -144,23 +152,23 @@ public QueryTransformer queryTransformer() {
 You can configure logging, query/slow query listeners and more using your `application.properties`:
 ```properties
 # One of logging libraries (slf4j, jul, common, sysout)
-spring.datasource.decorator.datasource-proxy.logging=slf4j
+decorator.datasource.datasource-proxy.logging=slf4j
 
-spring.datasource.decorator.datasource-proxy.query.enable-logging=true
-spring.datasource.decorator.datasource-proxy.query.log-level=debug
+decorator.datasource.datasource-proxy.query.enable-logging=true
+decorator.datasource.datasource-proxy.query.log-level=debug
 # Logger name to log all queries, default depends on chosen logging, e.g. net.ttddyy.dsproxy.listener.logging.SLF4JQueryLoggingListener
-spring.datasource.decorator.datasource-proxy.query.logger-name=
+decorator.datasource.datasource-proxy.query.logger-name=
 
-spring.datasource.decorator.datasource-proxy.slow-query.enable-logging=true
-spring.datasource.decorator.datasource-proxy.slow-query.log-level=warn
-spring.datasource.decorator.datasource-proxy.slow-query.logger-name=
+decorator.datasource.datasource-proxy.slow-query.enable-logging=true
+decorator.datasource.datasource-proxy.slow-query.log-level=warn
+decorator.datasource.datasource-proxy.slow-query.logger-name=
 # Number of seconds to consider query as slow and log it
-spring.datasource.decorator.datasource-proxy.slow-query.threshold=300
+decorator.datasource.datasource-proxy.slow-query.threshold=300
 
-spring.datasource.decorator.datasource-proxy.multiline=true
-spring.datasource.decorator.datasource-proxy.json-format=false
+decorator.datasource.datasource-proxy.multiline=true
+decorator.datasource.datasource-proxy.json-format=false
 # Enable Query Metrics
-spring.datasource.decorator.datasource-proxy.count-query=false
+decorator.datasource.datasource-proxy.count-query=false
 ```
 
 **Flexy Pool**
@@ -193,23 +201,23 @@ All beans of type `ConnectionAcquiringStrategyFactory` are used to provide `Conn
 You can configure your `FlexyPoolDataSource` by using bean `FlexyPoolConfigurationBuilderCustomizer` or properties:
 ```properties
 # Increments pool size if connection acquire request has timed out
-spring.datasource.decorator.flexy-pool.acquiring-strategy.increment-pool.max-overflow-pool-size=15
-spring.datasource.decorator.flexy-pool.acquiring-strategy.increment-pool.timeout-millis=500
+decorator.datasource.flexy-pool.acquiring-strategy.increment-pool.max-overflow-pool-size=15
+decorator.datasource.flexy-pool.acquiring-strategy.increment-pool.timeout-millis=500
 
 # Retries on getting connection
-spring.datasource.decorator.flexy-pool.acquiring-strategy.retry.attempts=2
+decorator.datasource.flexy-pool.acquiring-strategy.retry.attempts=2
 
 # Enable metrics exporting to the JMX
-spring.datasource.decorator.flexy-pool.metrics.reporter.jmx.enabled=true
-spring.datasource.decorator.flexy-pool.metrics.reporter.jmx.auto-start=false
+decorator.datasource.flexy-pool.metrics.reporter.jmx.enabled=true
+decorator.datasource.flexy-pool.metrics.reporter.jmx.auto-start=false
 
 # Millis between two consecutive log reports
-spring.datasource.decorator.flexy-pool.metrics.reporter.log.millis=300000
+decorator.datasource.flexy-pool.metrics.reporter.log.millis=300000
 
 # Enable logging and publishing ConnectionAcquireTimeThresholdExceededEvent when a connection acquire request has timed out
-spring.datasource.decorator.flexy-pool.threshold.connection.acquire=50
+decorator.datasource.flexy-pool.threshold.connection.acquire=50
 # Enable logging and publishing ConnectionLeaseTimeThresholdExceededEvent when a connection lease has exceeded the given time threshold
-spring.datasource.decorator.flexy-pool.threshold.connection.lease=1000
+decorator.datasource.flexy-pool.threshold.connection.lease=1000
 ```
 
 **Spring Cloud Sleuth**
@@ -245,4 +253,4 @@ public DataSourceDecorator customDecorator() {
 
 **Disable Decorating**
 
-If you want to disable decorating set `spring.datasource.decorator.excludeBeans` with bean names you want to exclude or set `spring.datasource.decorator.enabled` to `false` if you want to disable all decorators for all datasources.
+If you want to disable decorating set `decorator.datasource.excludeBeans` with bean names you want to exclude or set `decorator.datasource.enabled` to `false` if you want to disable all decorators for all datasources.

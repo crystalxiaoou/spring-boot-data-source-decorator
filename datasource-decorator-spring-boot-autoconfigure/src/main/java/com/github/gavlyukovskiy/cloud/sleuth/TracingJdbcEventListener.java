@@ -26,10 +26,7 @@ import org.springframework.cloud.sleuth.Tracer;
 import org.springframework.cloud.sleuth.util.ExceptionUtils;
 import org.springframework.util.StringUtils;
 
-import javax.sql.CommonDataSource;
 import java.sql.SQLException;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Listener to represent each connection and sql query as a span.
@@ -40,73 +37,77 @@ import java.util.concurrent.ConcurrentHashMap;
 public class TracingJdbcEventListener extends SimpleJdbcEventListener {
 
     private final Tracer tracer;
-    private Map<CommonDataSource, String> resolvedP6SpyNames = new ConcurrentHashMap<>();
+    private final P6SpySpanNameResolver p6SpySpanNameResolver;
 
-    TracingJdbcEventListener(Tracer tracer) {
+    TracingJdbcEventListener(Tracer tracer, P6SpySpanNameResolver p6SpySpanNameResolver) {
         this.tracer = tracer;
+        this.p6SpySpanNameResolver = p6SpySpanNameResolver;
     }
 
     @Override
     public void onConnectionWrapped(ConnectionInformation connectionInformation) {
-        String dataSourceName = dataSourceUrl(connectionInformation);
-        tracer.createSpan(dataSourceName + "/connection");
+        Span connectionSpan = tracer.createSpan(p6SpySpanNameResolver.connectionSpanName(connectionInformation));
+        connectionSpan.logEvent(Span.CLIENT_SEND);
         tracer.addTag(Span.SPAN_LOCAL_COMPONENT_TAG_NAME, "database");
     }
 
     @Override
     public void onBeforeAnyExecute(StatementInformation statementInformation) {
-        ConnectionInformation connectionInformation = statementInformation.getConnectionInformation();
-        Span connectionSpan = tracer.getCurrentSpan();
-        String dataSourceName = dataSourceUrl(connectionInformation);
-        tracer.createSpan(dataSourceName + "/query", connectionSpan);
+        Span statementSpan = tracer.createSpan(p6SpySpanNameResolver.querySpanName(statementInformation));
+        statementSpan.logEvent(Span.CLIENT_SEND);
         tracer.addTag(Span.SPAN_LOCAL_COMPONENT_TAG_NAME, "database");
     }
 
     @Override
     public void onAfterAnyExecute(StatementInformation statementInformation, long timeElapsedNanos, SQLException e) {
         Span statementSpan = tracer.getCurrentSpan();
-        statementSpan.tag(SleuthListenerConfiguration.SPAN_SQL_QUERY_TAG_NAME, getSql(statementInformation));
+        statementSpan.logEvent(Span.CLIENT_RECV);
+        tracer.addTag(SleuthListenerConfiguration.SPAN_SQL_QUERY_TAG_NAME, getSql(statementInformation));
         if (e != null) {
-            statementSpan.tag(Span.SPAN_ERROR_TAG_NAME, ExceptionUtils.getExceptionMessage(e));
+            tracer.addTag(Span.SPAN_ERROR_TAG_NAME, ExceptionUtils.getExceptionMessage(e));
         }
         tracer.close(statementSpan);
     }
 
     @Override
     public void onAfterExecuteQuery(PreparedStatementInformation statementInformation, long timeElapsedNanos, SQLException e) {
-        Span statementSpan = tracer.getCurrentSpan();
-        statementSpan.logEvent("executed");
-        onAfterExecuteQueryWithoutClosingSpan(statementInformation, timeElapsedNanos, e);
+        if (e != null) {
+            super.onAfterExecuteQuery(statementInformation, timeElapsedNanos, e);
+        }
+        else {
+            // if exception wasn't raised span will be closed after closing ResultSet
+            onAfterExecuteQueryWithoutClosingSpan(statementInformation);
+        }
     }
 
     @Override
     public void onAfterExecuteQuery(StatementInformation statementInformation, long timeElapsedNanos, String sql, SQLException e) {
-        Span statementSpan = tracer.getCurrentSpan();
-        statementSpan.logEvent("executed");
-        onAfterExecuteQueryWithoutClosingSpan(statementInformation, timeElapsedNanos, e);
+        if (e != null) {
+            super.onAfterExecuteQuery(statementInformation, timeElapsedNanos, sql, e);
+        }
+        else {
+            // if exception wasn't raised span will be closed after closing ResultSet
+            onAfterExecuteQueryWithoutClosingSpan(statementInformation);
+        }
     }
 
     @Override
     public void onAfterExecuteUpdate(PreparedStatementInformation statementInformation, long timeElapsedNanos, int rowCount, SQLException e) {
-        Span statementSpan = tracer.getCurrentSpan();
-        statementSpan.tag(SleuthListenerConfiguration.SPAN_ROW_COUNT_TAG_NAME, String.valueOf(rowCount));
+        tracer.addTag(SleuthListenerConfiguration.SPAN_ROW_COUNT_TAG_NAME, String.valueOf(rowCount));
         super.onAfterExecuteUpdate(statementInformation, timeElapsedNanos, rowCount, e);
     }
 
     @Override
     public void onAfterExecuteUpdate(StatementInformation statementInformation, long timeElapsedNanos, String sql, int rowCount, SQLException e) {
-        Span statementSpan = tracer.getCurrentSpan();
-        statementSpan.tag(SleuthListenerConfiguration.SPAN_ROW_COUNT_TAG_NAME, String.valueOf(rowCount));
+        tracer.addTag(SleuthListenerConfiguration.SPAN_ROW_COUNT_TAG_NAME, String.valueOf(rowCount));
         super.onAfterExecuteUpdate(statementInformation, timeElapsedNanos, sql, rowCount, e);
     }
 
-    private void onAfterExecuteQueryWithoutClosingSpan(StatementInformation statementInformation, long timeElapsedNanos, SQLException e) {
+    private void onAfterExecuteQueryWithoutClosingSpan(StatementInformation statementInformation) {
         // close span after result set is closed to include fetch time
         Span statementSpan = tracer.getCurrentSpan();
-        statementSpan.tag(SleuthListenerConfiguration.SPAN_SQL_QUERY_TAG_NAME, getSql(statementInformation));
-        if (e != null) {
-            statementSpan.tag(Span.SPAN_ERROR_TAG_NAME, ExceptionUtils.getExceptionMessage(e));
-        }
+        statementSpan.logEvent("execute");
+        tracer.addTag(SleuthListenerConfiguration.SPAN_SQL_QUERY_TAG_NAME, getSql(statementInformation));
     }
 
     private String getSql(StatementInformation statementInformation) {
@@ -118,8 +119,10 @@ public class TracingJdbcEventListener extends SimpleJdbcEventListener {
     @Override
     public void onAfterResultSetClose(ResultSetInformation resultSetInformation, SQLException e) {
         Span statementSpan = tracer.getCurrentSpan();
+        statementSpan.logEvent(Span.CLIENT_RECV);
+        tracer.addTag(SleuthListenerConfiguration.SPAN_ROW_COUNT_TAG_NAME, String.valueOf(resultSetInformation.getCurrRow()));
         if (e != null) {
-            statementSpan.tag(Span.SPAN_ERROR_TAG_NAME, ExceptionUtils.getExceptionMessage(e));
+            tracer.addTag(Span.SPAN_ERROR_TAG_NAME, ExceptionUtils.getExceptionMessage(e));
         }
         tracer.close(statementSpan);
     }
@@ -128,7 +131,7 @@ public class TracingJdbcEventListener extends SimpleJdbcEventListener {
     public void onAfterCommit(ConnectionInformation connectionInformation, long timeElapsedNanos, SQLException e) {
         Span connectionSpan = tracer.getCurrentSpan();
         if (e != null) {
-            connectionSpan.tag(Span.SPAN_ERROR_TAG_NAME, ExceptionUtils.getExceptionMessage(e));
+            tracer.addTag(Span.SPAN_ERROR_TAG_NAME, ExceptionUtils.getExceptionMessage(e));
         }
         connectionSpan.logEvent("commit");
     }
@@ -137,7 +140,7 @@ public class TracingJdbcEventListener extends SimpleJdbcEventListener {
     public void onAfterRollback(ConnectionInformation connectionInformation, long timeElapsedNanos, SQLException e) {
         Span connectionSpan = tracer.getCurrentSpan();
         if (e != null) {
-            connectionSpan.tag(Span.SPAN_ERROR_TAG_NAME, ExceptionUtils.getExceptionMessage(e));
+            tracer.addTag(Span.SPAN_ERROR_TAG_NAME, ExceptionUtils.getExceptionMessage(e));
         }
         connectionSpan.logEvent("rollback");
     }
@@ -145,20 +148,10 @@ public class TracingJdbcEventListener extends SimpleJdbcEventListener {
     @Override
     public void onAfterConnectionClose(ConnectionInformation connectionInformation, SQLException e) {
         Span connectionSpan = tracer.getCurrentSpan();
+        connectionSpan.logEvent(Span.CLIENT_RECV);
         if (e != null) {
-            connectionSpan.tag(Span.SPAN_ERROR_TAG_NAME, ExceptionUtils.getExceptionMessage(e));
+            tracer.addTag(Span.SPAN_ERROR_TAG_NAME, ExceptionUtils.getExceptionMessage(e));
         }
         tracer.close(connectionSpan);
-    }
-
-    private String dataSourceUrl(ConnectionInformation connectionInformation) {
-        return resolvedP6SpyNames.computeIfAbsent(connectionInformation.getDataSource(), dataSource -> {
-            try {
-                return connectionInformation.getConnection().getMetaData().getURL();
-            }
-            catch (SQLException e) {
-                return "jdbc:";
-            }
-        });
     }
 }

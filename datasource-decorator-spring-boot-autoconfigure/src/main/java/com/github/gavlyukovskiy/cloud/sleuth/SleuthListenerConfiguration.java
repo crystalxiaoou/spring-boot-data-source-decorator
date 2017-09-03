@@ -29,17 +29,25 @@ import org.springframework.context.annotation.Bean;
  * @author Arthur Gavlyukovskiy
  * @since 1.2
  */
-class SleuthListenerConfiguration {
+public class SleuthListenerConfiguration {
 
     public static final String SPAN_SQL_QUERY_TAG_NAME = "sql";
     public static final String SPAN_ROW_COUNT_TAG_NAME = "row-count";
+    public static final String SPAN_CONNECTION_POSTFIX = "/connection";
+    public static final String SPAN_QUERY_POSTFIX = "/query";
 
     @ConditionalOnBean(P6SpyDataSourceDecorator.class)
     static class P6SpyConfiguration {
 
         @Bean
-        public TracingJdbcEventListener tracingJdbcEventListener(Tracer tracer) {
-            return new TracingJdbcEventListener(tracer);
+        public TracingJdbcEventListener tracingJdbcEventListener(Tracer tracer, P6SpySpanNameResolver p6SpySpanNameResolver) {
+            return new TracingJdbcEventListener(tracer, p6SpySpanNameResolver);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public P6SpySpanNameResolver dataSourceNameResolver() {
+            return new P6SpySpanNameResolver();
         }
     }
 
@@ -48,8 +56,14 @@ class SleuthListenerConfiguration {
     static class ProxyDataSourceConfiguration {
 
         @Bean
-        public TracingQueryExecutionListener tracingQueryExecutionListener(Tracer tracer) {
-            return new TracingQueryExecutionListener(tracer);
+        public TracingQueryExecutionListener tracingQueryExecutionListener(Tracer tracer, DataSourceProxySpanNameResolver dataSourceProxySpanNameResolver) {
+            return new TracingQueryExecutionListener(tracer, dataSourceProxySpanNameResolver);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public DataSourceProxySpanNameResolver dataSourceProxySpanNameResolver() {
+            return new DataSourceProxySpanNameResolver();
         }
     }
 }
