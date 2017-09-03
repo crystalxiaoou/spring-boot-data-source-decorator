@@ -22,14 +22,14 @@ repositories {
 dependencies {
     compile(project(":p6spy-spring-boot-starter"))
 
-    compile("org.springframework.boot:spring-boot:2.0.0.M3")
-    compile("org.springframework.boot:spring-boot-starter:2.0.0.M3")
-    compile("org.springframework.boot:spring-boot-autoconfigure:2.0.0.M3")
-    compile("org.springframework.boot:spring-boot-starter-logging:2.0.0.M3")
-    compile("org.springframework.boot:spring-boot-starter-tomcat:2.0.0.M3")
-    compile("org.springframework.boot:spring-boot-starter-web:2.0.0.M3")
-    compile("org.springframework.boot:spring-boot-starter-jdbc:2.0.0.M3")
-    compile("org.springframework.boot:spring-boot-starter-aop:2.0.0.M3")
+    compile("org.springframework.boot:spring-boot:1.5.4.RELEASE")
+    compile("org.springframework.boot:spring-boot-starter:1.5.4.RELEASE")
+    compile("org.springframework.boot:spring-boot-autoconfigure:1.5.4.RELEASE")
+    compile("org.springframework.boot:spring-boot-starter-logging:1.5.4.RELEASE")
+    compile("org.springframework.boot:spring-boot-starter-tomcat:1.5.4.RELEASE")
+    compile("org.springframework.boot:spring-boot-starter-web:1.5.4.RELEASE")
+    compile("org.springframework.boot:spring-boot-starter-jdbc:1.5.4.RELEASE")
+    compile("org.springframework.boot:spring-boot-starter-aop:1.5.4.RELEASE")
 
     compile("org.springframework.cloud:spring-cloud-sleuth-core:1.2.4.RELEASE")
 
