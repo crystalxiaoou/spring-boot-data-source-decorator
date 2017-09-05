@@ -2,27 +2,37 @@ package com.github.gavlyukovskiy.sample;
 
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.cloud.client.HostInfoEnvironmentPostProcessor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.cloud.sleuth.Sampler;
+import org.springframework.cloud.sleuth.SpanAdjuster;
+import org.springframework.cloud.sleuth.SpanNamer;
+import org.springframework.cloud.sleuth.SpanReporter;
+import org.springframework.cloud.sleuth.TraceKeys;
+import org.springframework.cloud.sleuth.log.SpanLogger;
+import org.springframework.cloud.sleuth.trace.DefaultTracer;
 import org.springframework.cloud.sleuth.util.ExceptionUtils;
+import org.springframework.cloud.sleuth.zipkin.EndpointLocator;
+import org.springframework.cloud.sleuth.zipkin.ZipkinSpanListener;
+import org.springframework.cloud.sleuth.zipkin.ZipkinSpanReporter;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.Environment;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.slf4j.LoggerFactory.getLogger;
 
-@SpringBootApplication(
-        exclude = HostInfoEnvironmentPostProcessor.class
-)
+@SpringBootApplication
 public class SampleApplication {
 
     private static final Logger log = getLogger(SampleApplication.class);

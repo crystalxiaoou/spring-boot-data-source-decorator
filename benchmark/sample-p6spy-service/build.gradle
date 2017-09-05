@@ -1,0 +1,19 @@
+plugins {
+    id "org.springframework.boot" version "1.5.6.RELEASE"
+}
+
+dependencies {
+    compile(project(":benchmark:sample-service"))
+    compile(project(":p6spy-spring-boot-starter"))
+}
+
+jar {
+    baseName = 'service-p6spy'
+    version = ''
+}
+
+bootRepackage {
+    mainClass = 'com.github.gavlyukovskiy.sample.SampleApplication'
+}
+
+

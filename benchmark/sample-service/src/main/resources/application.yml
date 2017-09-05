@@ -2,6 +2,8 @@ server:
   port: 0
 
 spring:
+  application:
+    name: benchmark
   sleuth:
     enabled: false
     sampler:
@@ -15,10 +17,20 @@ spring:
       username: sa
       password:
       maximum-pool-size: 10
-logging:
-  level:
-    ROOT: info
+  zipkin:
+    enabled: false
+
 
 decorator:
   datasource:
     enabled: false
+    p6spy:
+      enable-logging: false
+    datasource-proxy:
+      query:
+        enable-logging: false
+      slow-query:
+        enable-logging: false
+logging:
+  level:
+    org.springframework.cloud.commons.util.InetUtils: TRACE

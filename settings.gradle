@@ -9,3 +9,8 @@ include 'datasource-decorator-benchmark'
 include 'samples:p6spy-sample'
 include 'samples:datasource-proxy-sample'
 include 'samples:flexy-pool-sample'
+
+include 'benchmark'
+include 'benchmark:sample-service'
+include 'benchmark:sample-p6spy-service'
+include 'benchmark:sample-datasource-proxy-service'

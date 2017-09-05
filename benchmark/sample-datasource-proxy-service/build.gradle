@@ -1,0 +1,19 @@
+plugins {
+    id "org.springframework.boot" version "1.5.6.RELEASE"
+}
+
+dependencies {
+    compile(project(":benchmark:sample-service"))
+    compile(project(":datasource-proxy-spring-boot-starter"))
+}
+
+jar {
+    baseName = 'service-datasource-proxy'
+    version = ''
+}
+
+bootRepackage {
+    mainClass = 'com.github.gavlyukovskiy.sample.SampleApplication'
+}
+
+

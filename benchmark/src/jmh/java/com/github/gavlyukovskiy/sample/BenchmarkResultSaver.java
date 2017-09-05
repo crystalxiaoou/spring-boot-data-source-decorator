@@ -14,11 +14,11 @@ public class BenchmarkResultSaver {
     }
 
     public static String getResultPath(Class<?> benchmarkClass) throws IOException {
-        Path benchmarkDirectory = Paths.get("benchmark");
+        Path benchmarkDirectory = Paths.get("benchmark/results");
         if (Files.notExists(benchmarkDirectory)) {
             Files.createDirectory(benchmarkDirectory);
         }
-        return "benchmark/" +
+        return "benchmark/results/" +
                 LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE) + "-" +
                 LocalTime.now().toSecondOfDay() + "-" +
                 benchmarkClass.getSimpleName() + ".txt";
