@@ -1,19 +1,31 @@
 plugins {
     id "org.springframework.boot" version "1.5.6.RELEASE"
+    id "com.palantir.docker" version "0.19.2"
 }
 
 dependencies {
     compile(project(":benchmark:sample-service"))
     compile(project(":datasource-proxy-spring-boot-starter"))
-}
 
-jar {
-    baseName = 'service-datasource-proxy'
-    version = ''
+    compile("org.springframework.boot:spring-boot:1.5.6.RELEASE")
+    compile("org.springframework.boot:spring-boot-starter:1.5.6.RELEASE")
+    compile("org.springframework.boot:spring-boot-autoconfigure:1.5.6.RELEASE")
+    compile("org.springframework.boot:spring-boot-starter-logging:1.5.6.RELEASE")
+    compile("org.springframework.boot:spring-boot-starter-tomcat:1.5.6.RELEASE")
+    compile("org.springframework.boot:spring-boot-starter-web:1.5.6.RELEASE")
+    compile("org.springframework.boot:spring-boot-starter-jdbc:1.5.6.RELEASE")
+    compile("org.springframework.boot:spring-boot-starter-aop:1.5.6.RELEASE")
+    compile("org.springframework.boot:spring-boot-starter-data-jpa:1.5.6.RELEASE")
+
+    compile("org.springframework.cloud:spring-cloud-sleuth-core:1.2.4.RELEASE")
+    compile("org.springframework.cloud:spring-cloud-sleuth-zipkin:1.2.4.RELEASE")
 }
 
 bootRepackage {
     mainClass = 'com.github.gavlyukovskiy.sample.SampleApplication'
 }
 
-
+docker {
+    dependsOn(build)
+    name = "datasource-decorator/benchmark/$project.name"
+}

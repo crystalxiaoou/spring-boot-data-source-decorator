@@ -1,5 +1,5 @@
 plugins {
-    id "me.champeau.gradle.jmh" version "0.4.3"
+    id "me.champeau.gradle.jmh" version "0.4.6"
 }
 
 dependencies {
@@ -12,21 +12,17 @@ dependencies {
 
 jmh {
     duplicateClassesStrategy = 'warn'
+    dependsOn
+}
+
+task runContainers() {
+    exec {
+        commandLine 'cmd', '/c' ,"docker run -p 12991:12001 datasource-decorator/benchmark/sample-service"
+        commandLine 'cmd', '/c' ,"docker run -p 12992:12002 datasource-decorator/benchmark/sample-p6spy-service"
+        commandLine 'cmd', '/c' ,"docker run -p 12993:12003 datasource-decorator/benchmark/sample-datasource-proxy-service"
+    }
 }
 
 build.dependsOn(":benchmark:sample-service:build")
 build.dependsOn(":benchmark:sample-p6spy-service:build")
 build.dependsOn(":benchmark:sample-datasource-proxy-service:build")
-
-build {
-    doLast {
-        copy {
-            from 'sample-service/build/libs'
-            from 'sample-p6spy-service/build/libs'
-            from 'sample-datasource-proxy-service/build/libs'
-            into 'build/'
-        }
-    }
-}
-
-

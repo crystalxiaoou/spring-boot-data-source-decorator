@@ -3,6 +3,7 @@ package com.github.gavlyukovskiy.sample;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import org.apache.commons.io.IOUtils;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -13,7 +14,7 @@ import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
-import org.openjdk.jmh.annotations.Threads;
+import org.openjdk.jmh.annotations.TearDown;
 import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.results.format.ResultFormatType;
 import org.openjdk.jmh.runner.Runner;
@@ -21,8 +22,6 @@ import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.concurrent.TimeUnit;
 
 @BenchmarkMode(Mode.AverageTime)
@@ -30,75 +29,99 @@ import java.util.concurrent.TimeUnit;
 @State(Scope.Benchmark)
 @Measurement(iterations = 5)
 @Warmup(iterations = 3)
-@Fork(value = 1)
-@Threads(Threads.MAX)
+@Fork(value = 2)
 public class TracingBenchmark {
 
-    @Param({ /*"base", "sleuth", "decorator", "sleuth_decorator",*/ "sleuth_decorator_zipkin" })
+    public static final int HTTP_OK = 200;
+
+    @Param({ "base", "sleuth", "decorator", "sleuth,decorator", "sleuth,decorator,zipkin" })
     private String profile;
+    @Param({ "sample-p6spy-service", "sample-datasource-proxy-service" })
+    private String service;
+
+    private String containerId;
     private String url;
     private OkHttpClient client;
 
     @Setup
     public void setup() throws IOException {
         client = new OkHttpClient();
-        url = "http://localhost:" + loadPort(profile);
+        url = "http://localhost:12001";
+        runContainer();
     }
 
-/*
-    TracingBenchmark.noop                base  avgt   10  0.214 ± 0.002  ms/op
-    TracingBenchmark.noop              sleuth  avgt   10  0.245 ± 0.004  ms/op
-    TracingBenchmark.noop               p6spy  avgt   10  0.216 ± 0.004  ms/op
-    TracingBenchmark.noop        sleuth_p6spy  avgt   10  0.239 ± 0.006  ms/op
+    @TearDown
+    public void tearDown() throws IOException {
+        stopContainer();
+    }
 
     @Benchmark
     public String noop() throws IOException {
-        return rest(blackhole, "/noop");
+        return request("/noop");
     }
-*/
 
     @Benchmark
     public String jdbc() throws IOException {
-        return rest("/jdbc");
+        return request("/jdbc");
     }
 
     @Benchmark
     public String hibernate() throws IOException {
-        return rest("/hibernate");
+        return request("/hibernate");
     }
 
-    private String rest(String endpoint) throws IOException {
+    private String request(String endpoint) throws IOException {
         Request request = new Request.Builder().url(url + endpoint).build();
         Response response = client.newCall(request).execute();
-        if (response.code() != 200) {
+        if (response.code() != HTTP_OK) {
             throw new IllegalStateException("Received " + response.code() + " status");
         }
-        return response.body().string();
+        return response.body() != null ? response.body().string() : null;
     }
 
-    private int loadPort(String profile) throws IOException {
-        return Files.lines(Paths.get("benchmark/" + profile + ".port")).findFirst().map(Integer::valueOf).orElseThrow(IllegalStateException::new);
+    private void runContainer() throws IOException {
+        System.out.println("Running container...");
+
+        Process process = new ProcessBuilder(
+                "docker run" +
+                        " -d" +
+                        " --name " + service +
+                        " -p 12001:12001" +
+                        " -e \"SPRING.PROFILES.ACTIVE=" + profile + "\"" +
+                        " datasource-decorator/benchmark/" + service)
+                .start();
+
+        if (process.exitValue() != -1) {
+            throw new IllegalStateException("Error code while starting container: " + process.exitValue());
+        }
+
+        containerId = IOUtils.toString(process.getInputStream());
+
+        System.out.println("Container " + containerId + " has been started");
+    }
+
+    private void stopContainer() throws IOException {
+        System.out.println("Stopping container...");
+
+        Process process = new ProcessBuilder(
+                "docker stop " + containerId,
+                "docker rm " + containerId)
+                .start();
+
+        if (process.exitValue() != -1) {
+            throw new IllegalStateException("Error code while stopping container: " + process.exitValue());
+        }
+
+        System.out.println("Container " + containerId + " has been stopped");
     }
 
     public static void main(String[] args) throws Exception {
-        OkHttpClient client = new OkHttpClient();
-        for (int i = 0; i < 10; i++) {
-            long start = System.currentTimeMillis();
-            Request request = new Request.Builder().url("http://localhost:51108/jdbc").build();
-            Response response = client.newCall(request).execute();
-            if (response.code() != 200) {
-                throw new IllegalStateException("Received " + response.code() + " status");
-            }
-            System.out.println(response.body().string());
-            System.out.println((System.currentTimeMillis() - start) + "ms");
-        }
-
-        /*Options opt = new OptionsBuilder()
+        Options opt = new OptionsBuilder()
                 .include(TracingBenchmark.class.getSimpleName())
                 .result(BenchmarkResultSaver.getResultPath(TracingBenchmark.class))
                 .resultFormat(ResultFormatType.TEXT)
                 .build();
 
-        new Runner(opt).run();*/
+        new Runner(opt).run();
     }
 }
