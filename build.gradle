@@ -6,8 +6,8 @@ buildscript {
 }
 
 plugins {
-    id "com.jfrog.bintray" version "1.7.3"
-    id "pl.allegro.tech.build.axion-release" version "1.7.1"
+    id "com.jfrog.bintray" version "1.8.0"
+    id "pl.allegro.tech.build.axion-release" version "1.9.1"
 }
 
 def pomConfig = {
@@ -31,12 +31,51 @@ def pomConfig = {
     }
 }
 
+task releaseCheck() {
+    doLast {
+        def errors = []
+        if (!project.hasProperty('release.version'))
+            errors.add("'-Prelease.version' must be set")
+        if (!project.hasProperty('release.customUsername'))
+            errors.add("'-Prelease.customUsername' must be set")
+        if (!project.hasProperty('release.customPassword'))
+            errors.add("'-Prelease.customPassword' must be set")
+        if (!errors.isEmpty()) {
+            throw new IllegalStateException(errors.join("\n"));
+        }
+    }
+}
+
+task bintrayUploadCheck() {
+    doLast {
+        def errors = []
+        if (project.version.contains("SNAPSHOT")) {
+            errors.add("Cannot release SNAPSHOT version")
+        }
+        if (!System.getenv('BINTRAY_USER') && !project.hasProperty('release.bintray_user'))
+            errors.add("'BINTRAY_USER' or '-Prelease.bintray_user' must be set")
+        if (!System.getenv('BINTRAY_KEY') && !project.hasProperty('release.bintray_key'))
+            errors.add("'BINTRAY_KEY' or '-Prelease.bintray_key' must be set")
+        if (!System.getenv('GPG_PASSPHRASE') && !project.hasProperty('release.gpg_passphrase'))
+            errors.add("'GPG_PASSPHRASE' or '-Prelease.gpg_passphrase' must be set")
+        if (!System.getenv('SONATYPE_USER') && !project.hasProperty('release.sonatype_user'))
+            errors.add("'SONATYPE_USER' or '-Prelease.sonatype_user' must be set")
+        if (!System.getenv('SONATYPE_PASSWORD') && !project.hasProperty('release.sonatype_password'))
+            errors.add("'SONATYPE_PASSWORD' or '-Prelease.sonatype_password' must be set")
+        if (!errors.isEmpty()) {
+            throw new IllegalStateException(errors.join("\n"));
+        }
+    }
+}
+
 subprojects {
     ext {
-        springBootVersion = '1.4.2.RELEASE'
-        p6SpyVersion = '3.2.0'
-        datasourceProxyVersion = '1.4.2'
-        flexyPoolVersion = '1.2.9'
+        springBootVersion = '2.0.3.RELEASE'
+        p6SpyVersion = '3.7.0'
+        datasourceProxyVersion = '1.4.9'
+        flexyPoolVersion = '1.3.0'
+        sleuthVersion = '1.3.1.RELEASE'
+        micrometerVersion = '1.0.4'
 
         release = !project.name.contains("sample")
     }
@@ -62,6 +101,8 @@ subprojects {
 
     repositories {
         mavenCentral()
+        maven() { url 'http://repo.spring.io/milestone' }
+        maven() { url 'http://repo.spring.io/snapshot' }
     }
 
     if (ext.release) {
@@ -76,7 +117,7 @@ subprojects {
                     artifact javadocJar
                     groupId project.group
                     artifactId project.name
-                    version project.version
+                    version scmVersion.version
                     pom.withXml {
                         def root = asNode()
                         root.appendNode('description', 'Spring Boot integration with p6spy, datasource-proxy and flexy-pool')
@@ -89,17 +130,29 @@ subprojects {
         }
 
         bintray {
-            user = System.getenv('BINTRAY_USER')
-            key = System.getenv('BINTRAY_KEY')
+            user = System.getenv('BINTRAY_USER') ?: project.findProperty('release.bintray_user')
+            key = System.getenv('BINTRAY_KEY') ?: project.findProperty('release.bintray_key')
             publications = ['mavenJava']
+            publish = true
             pkg {
                 repo = project.group
                 name = project.name
                 licenses = ['Apache-2.0']
+                publicDownloadNumbers = true
                 version {
-                    name = project.version
+                    name = scmVersion.version
                     released = new Date()
                     vcsTag = scmVersion.tag.prefix + scmVersion.tag.versionSeparator + scmVersion.version
+                    gpg {
+                        sign = true
+                        passphrase = System.getenv('GPG_PASSPHRASE') ?: project.findProperty('release.gpg_passphrase')
+                    }
+                    mavenCentralSync {
+                        sync = true
+                        user = System.getenv('SONATYPE_USER') ?: project.findProperty('release.sonatype_user')
+                        password = System.getenv('SONATYPE_PASSWORD') ?: project.findProperty('release.sonatype_password')
+                        close = '1'
+                    }
                 }
             }
         }
@@ -121,4 +174,11 @@ subprojects {
             }
         }
     }
+}
+
+verifyRelease.finalizedBy(releaseCheck)
+bintrayUpload.dependsOn(bintrayUploadCheck)
+subprojects.each {
+    if (it.ext.release)
+        verifyRelease.dependsOn("${it.name}:build")
 }

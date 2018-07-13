@@ -28,6 +28,8 @@ import java.util.List;
  * Returns link of both real {@link DataSource}, decorated {@link DataSource}
  * and all decorating chain including decorator bean name, instance and result of decorating.
  *
+ * @see DataSourceDecoratorInterceptor
+ *
  * @author Arthur Gavlyukovskiy
  * @since 1.2.2
  */
@@ -56,7 +58,6 @@ public interface DecoratedDataSource extends RawTargetAccess {
 
     /**
      * Returns list with all decorators applied on a {@link DataSource} reverse ordered with applying order.
-     * First applied entry holds initial {@link DataSource} bean itself.
      *
      * @return decorating information chain
      */

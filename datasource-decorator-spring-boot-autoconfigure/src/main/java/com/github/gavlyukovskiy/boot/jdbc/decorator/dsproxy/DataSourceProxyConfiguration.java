@@ -27,9 +27,8 @@ import net.ttddyy.dsproxy.transform.QueryTransformer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
-
-import java.util.List;
 
 /**
  * Configuration for integration with datasource-proxy, allows to use define custom {@link QueryExecutionListener},
@@ -43,37 +42,18 @@ public class DataSourceProxyConfiguration {
     @Autowired
     private DataSourceDecoratorProperties dataSourceDecoratorProperties;
 
-    @Autowired
-    private QueryCountStrategy queryCountStrategy;
-
-    @Autowired(required = false)
-    private List<QueryExecutionListener> listeners;
-
-    @Autowired(required = false)
-    private ParameterTransformer parameterTransformer;
-
-    @Autowired(required = false)
-    private QueryTransformer queryTransformer;
-
     @Bean
     @ConditionalOnMissingBean
-    public ProxyDataSourceBuilder proxyDataSourceBuilder() {
+    public ProxyDataSourceBuilder proxyDataSourceBuilder(ProxyDataSourceBuilderConfigurer proxyDataSourceBuilderConfigurer) {
         ProxyDataSourceBuilder proxyDataSourceBuilder = ProxyDataSourceBuilder.create();
         DataSourceProxyProperties datasourceProxy = dataSourceDecoratorProperties.getDatasourceProxy();
-        datasourceProxy.configure(proxyDataSourceBuilder);
-        if (datasourceProxy.isCountQuery()) {
-            proxyDataSourceBuilder.countQuery(queryCountStrategy);
-        }
-        if (listeners != null) {
-            listeners.forEach(proxyDataSourceBuilder::listener);
-        }
-        if (parameterTransformer != null) {
-            proxyDataSourceBuilder.parameterTransformer(parameterTransformer);
-        }
-        if (queryTransformer != null) {
-            proxyDataSourceBuilder.queryTransformer(queryTransformer);
-        }
+        proxyDataSourceBuilderConfigurer.configure(proxyDataSourceBuilder, datasourceProxy);
         return proxyDataSourceBuilder;
+    }
+
+    @Bean
+    public ProxyDataSourceBuilderConfigurer proxyDataSourceBuilderConfigurer() {
+        return new ProxyDataSourceBuilderConfigurer();
     }
 
     @Bean
@@ -83,6 +63,7 @@ public class DataSourceProxyConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnProperty(value = "decorator.datasource.datasource-proxy.count-query", havingValue = "true")
     public QueryCountStrategy queryCountStrategy() {
         return new SingleQueryCountHolder();
     }

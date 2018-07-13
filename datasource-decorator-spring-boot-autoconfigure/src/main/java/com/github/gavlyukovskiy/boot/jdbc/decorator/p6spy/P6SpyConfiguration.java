@@ -19,6 +19,8 @@ package com.github.gavlyukovskiy.boot.jdbc.decorator.p6spy;
 import com.github.gavlyukovskiy.boot.jdbc.decorator.DataSourceDecoratorProperties;
 import com.p6spy.engine.event.JdbcEventListener;
 import com.p6spy.engine.logging.P6LogFactory;
+import com.p6spy.engine.spy.DefaultJdbcEventListenerFactory;
+import com.p6spy.engine.spy.JdbcEventListenerFactory;
 import com.p6spy.engine.spy.P6DataSource;
 import com.p6spy.engine.spy.P6ModuleManager;
 import com.p6spy.engine.spy.P6SpyFactory;
@@ -29,6 +31,7 @@ import com.p6spy.engine.spy.option.SystemProperties;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 
 import javax.annotation.PostConstruct;
@@ -69,9 +72,6 @@ public class P6SpyConfiguration {
         String customModuleList = initialP6SpyOptions.get("modulelist");
         if (customModuleList != null) {
             log.info("P6Spy modulelist is overridden, some p6spy configuration features will not be applied");
-            if (listeners != null && p6spy.isEnableRuntimeListeners() && customModuleList.contains(RuntimeListenerSupportFactory.class.getName())) {
-                RuntimeListenerSupportFactory.setListeners(listeners);
-            }
         }
         else {
             List<String> moduleList = new ArrayList<>();
@@ -80,19 +80,16 @@ public class P6SpyConfiguration {
             if (p6spy.isEnableLogging()) {
                 moduleList.add(P6LogFactory.class.getName());
             }
-            if (listeners != null) {
-                if (p6spy.isEnableRuntimeListeners()) {
-                    RuntimeListenerSupportFactory.setListeners(listeners);
-                    moduleList.add(RuntimeListenerSupportFactory.class.getName());
-                }
-                else {
-                    log.info("JdbcEventListener(s) " + listeners + " will not be applied since enable-runtime-listeners is false");
-                }
-            }
             System.setProperty("p6spy.config.modulelist", moduleList.stream().collect(Collectors.joining(",")));
         }
-        if (p6spy.isMultiline() && !initialP6SpyOptions.containsKey("logMessageFormat")) {
-            System.setProperty("p6spy.config.logMessageFormat", "com.p6spy.engine.spy.appender.MultiLineFormat");
+        if (!initialP6SpyOptions.containsKey("logMessageFormat")) {
+            if (p6spy.getLogFormat() != null) {
+                System.setProperty("p6spy.config.logMessageFormat", "com.p6spy.engine.spy.appender.CustomLineFormat");
+                System.setProperty("p6spy.config.customLogMessageFormat", p6spy.getLogFormat());
+            }
+            else if (p6spy.isMultiline()) {
+                System.setProperty("p6spy.config.logMessageFormat", "com.p6spy.engine.spy.appender.MultiLineFormat");
+            }
         }
         if (p6spy.isEnableLogging() && !initialP6SpyOptions.containsKey("appender")) {
             switch (p6spy.getLogging()) {
@@ -118,19 +115,17 @@ public class P6SpyConfiguration {
     @PreDestroy
     public void destroy() {
         P6SpyProperties p6spy = dataSourceDecoratorProperties.getP6spy();
-        if (p6spy.isEnableRuntimeListeners() && !initialP6SpyOptions.containsKey("modulelist")) {
-            if (listeners != null) {
-                RuntimeListenerSupportFactory.unsetListeners();
-            }
+        if (!initialP6SpyOptions.containsKey("modulelist")) {
             System.clearProperty("p6spy.config.modulelist");
         }
-        else if (p6spy.isEnableRuntimeListeners() && initialP6SpyOptions.get("modulelist").contains(RuntimeListenerSupportFactory.class.getName())) {
-            if (listeners != null) {
-                RuntimeListenerSupportFactory.unsetListeners();
+        if (!initialP6SpyOptions.containsKey("logMessageFormat")) {
+            if (p6spy.getLogFormat() != null) {
+                System.clearProperty("p6spy.config.logMessageFormat");
+                System.clearProperty("p6spy.config.customLogMessageFormat");
             }
-        }
-        if (p6spy.isMultiline() && !initialP6SpyOptions.containsKey("logMessageFormat")) {
-            System.clearProperty("p6spy.config.logMessageFormat");
+            else if (p6spy.isMultiline()) {
+                System.clearProperty("p6spy.config.logMessageFormat");
+            }
         }
         if (!initialP6SpyOptions.containsKey("appender")) {
             System.clearProperty("p6spy.config.appender");
@@ -159,7 +154,14 @@ public class P6SpyConfiguration {
     }
 
     @Bean
-    public P6SpyDataSourceDecorator p6SpyDataSourceDecorator() {
-        return new P6SpyDataSourceDecorator();
+    @ConditionalOnMissingBean
+    public JdbcEventListenerFactory jdbcEventListenerFactory() {
+        JdbcEventListenerFactory jdbcEventListenerFactory = new DefaultJdbcEventListenerFactory();
+        return listeners != null ? new ContextJdbcEventListenerFactory(jdbcEventListenerFactory, listeners) : jdbcEventListenerFactory;
+    }
+
+    @Bean
+    public P6SpyDataSourceDecorator p6SpyDataSourceDecorator(JdbcEventListenerFactory jdbcEventListenerFactory) {
+        return new P6SpyDataSourceDecorator(jdbcEventListenerFactory);
     }
 }
